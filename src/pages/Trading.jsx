@@ -28,6 +28,26 @@ function Trading() {
   // Mode: manual | auto
   const [mode, setMode] = useState('manual');
 
+  // Trading state management (new!)
+  const [tradingState, setTradingState] = useState({
+    status: 'idle', // idle | discharging | completed | paused
+    currentOrder: null, // { id, amount, price, startTime, duration, progress, discharged, revenue }
+    queue: [],
+  });
+
+  // Battery discharge power (kW) - configurable
+  const [dischargePower, setDischargePower] = useState(2.0);
+
+  // Power history for real-time monitoring (max 300 points = 5 minutes)
+  const [powerHistory, setPowerHistory] = useState([]);
+
+  // Confirmation modal
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingOrder, setPendingOrder] = useState(null);
+
+  // Demo speed multiplier (120x = 1 hour in 30 seconds)
+  const DEMO_SPEED = 120;
+
   // Auto-managed (grid-like) config
   const [autoConfig, setAutoConfig] = useState({
     baseline: 0.24,
@@ -35,7 +55,7 @@ function Trading() {
     chunkKwh: 0.5,
     upper: 0.6,
     lower: 0.12,
-    cooldownSec: 15,
+    cooldownSec: 15, // Cooldown between operations (seconds)
     simulatePrice: true,
   });
   const [autoRunning, setAutoRunning] = useState(false);
@@ -86,7 +106,7 @@ function Trading() {
     setTimeout(() => setShowToast(false), 1800);
   };
 
-  // Auto engine tick: simulate price (optional) and execute sells on grid crossings
+  // Auto engine tick: simulate price (optional) and queue orders on grid crossings
   useEffect(() => {
     if (!autoRunning) return;
     const { simulatePrice, lower, upper } = autoConfig;
@@ -106,33 +126,48 @@ function Trading() {
         return next;
       });
 
-      // After price update, check grid trigger using latest value from state closure
-      // Use a microtask to ensure tradingPrice state applied
+      // After price update, check grid trigger and queue discharge order (not instant sell)
       queueMicrotask(() => {
         if (!gridLevels.length) return;
         const price = typeof tradingPrice === 'number' ? tradingPrice : autoConfig.baseline || 0.24;
         const nextPrice = gridLevels[Math.min(gridIndex, gridLevels.length - 1)];
         const nowTs = Date.now();
+        
+        // Check cooldown between order triggers
         const cooldownOk = nowTs - lastSellAt >= (autoConfig.cooldownSec || 0) * 1000;
-        if (price >= nextPrice - 1e-6 && currentStorage > 0 && cooldownOk) {
+        
+        // Can only trigger if: price reached, storage available, cooldown passed, not currently discharging
+        if (price >= nextPrice - 1e-6 && currentStorage > 0 && cooldownOk && tradingState.status === 'idle') {
           const amount = Math.min(autoConfig.chunkKwh, currentStorage);
           const px = price;
-          const revenue = +(amount * px).toFixed(2);
-          // apply sell
-          setCurrentStorage((s) => +(Math.max(0, s - amount)).toFixed(2));
-          setWeeklyEarnings((prev) => {
-            const updated = [...prev];
-            if (updated.length > 0) {
-              const lastIdx = updated.length - 1;
-              updated[lastIdx] = { ...updated[lastIdx], earnings: (updated[lastIdx].earnings || 0) + revenue };
-            }
-            return updated;
-          });
-          setTradeHistory((prev) => [{ ts: nowTs, amount, price: px, revenue }, ...prev].slice(0, 100));
+          
+          // Queue the discharge order (same as manual mode)
+          const realDuration = (amount / dischargePower) * 3600 * 1000; // ms
+          const demoDuration = realDuration / DEMO_SPEED; // Accelerated for demo
+          
+          const newOrder = {
+            id: nowTs,
+            amount,
+            price: px,
+            startTime: nowTs,
+            duration: demoDuration,
+            realDuration,
+            progress: 0,
+            discharged: 0,
+            revenue: 0,
+          };
+          
+          setTradingState(prev => ({
+            status: 'discharging',
+            currentOrder: newOrder,
+            queue: prev.queue,
+          }));
+          
           setLastSellAt(nowTs);
-          setToastMessage(`Auto sold ${amount.toFixed(1)} kWh @ $${px.toFixed(2)}`);
+          setToastMessage(`Auto discharge: ${amount.toFixed(1)} kWh @ $${px.toFixed(2)} (${formatDuration(realDuration)})`);
           setShowToast(true);
-          setTimeout(() => setShowToast(false), 1800);
+          setTimeout(() => setShowToast(false), 2500);
+          
           // move to next grid level
           setGridIndex((i) => Math.min(i + 1, gridLevels.length - 1));
         }
@@ -140,7 +175,117 @@ function Trading() {
     }, 1200);
 
     return () => clearInterval(id);
-  }, [autoRunning, autoConfig, gridLevels, gridIndex, currentStorage, tradingPrice]);
+  }, [autoRunning, autoConfig, gridLevels, gridIndex, currentStorage, tradingPrice, tradingState.status, dischargePower]);
+
+  // Discharge process simulation
+  useEffect(() => {
+    if (tradingState.status !== 'discharging' || !tradingState.currentOrder) return;
+
+    const timer = setInterval(() => {
+      const { currentOrder } = tradingState;
+      const now = Date.now();
+      const elapsed = now - currentOrder.startTime;
+      const progress = Math.min(100, (elapsed / currentOrder.duration) * 100);
+
+      // Calculate discharged amount and revenue
+      const discharged = (currentOrder.amount * progress) / 100;
+      const revenue = discharged * currentOrder.price;
+
+      // Update trading state
+      setTradingState(prev => ({
+        ...prev,
+        currentOrder: {
+          ...prev.currentOrder,
+          progress,
+          discharged,
+          revenue,
+        },
+      }));
+
+      // Update storage in real-time
+      setCurrentStorage(prev => {
+        const initial = prev + currentOrder.discharged; // Restore previous
+        return +(Math.max(0, initial - discharged)).toFixed(2);
+      });
+
+      // Update power history for monitoring chart
+      setPowerHistory(prev => {
+        const newPoint = { time: now, power: dischargePower };
+        const updated = [...prev, newPoint];
+        // Keep last 300 points (5 minutes at 1 point/second)
+        return updated.slice(-300);
+      });
+
+      // Check completion
+      if (progress >= 100) {
+        clearInterval(timer);
+        
+        // Finalize order
+        setTradeHistory(prev => [{
+          ts: now,
+          amount: currentOrder.amount,
+          price: currentOrder.price,
+          revenue: currentOrder.amount * currentOrder.price,
+        }, ...prev].slice(0, 99));
+
+        setWeeklyEarnings(prev => {
+          const updated = [...prev];
+          if (updated.length > 0) {
+            const lastIdx = updated.length - 1;
+            updated[lastIdx] = { 
+              ...updated[lastIdx], 
+              earnings: (updated[lastIdx].earnings || 0) + (currentOrder.amount * currentOrder.price)
+            };
+          }
+          return updated;
+        });
+
+        setTradingState({
+          status: 'completed',
+          currentOrder: null,
+          queue: tradingState.queue,
+        });
+
+        // Reset to idle after 2 seconds
+        setTimeout(() => {
+          setTradingState(prev => ({ ...prev, status: 'idle' }));
+        }, 2000);
+
+        setToastMessage(`Discharge completed! Revenue: $${(currentOrder.amount * currentOrder.price).toFixed(2)}`);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+      }
+    }, 100); // Update every 100ms for smooth animation
+
+    return () => clearInterval(timer);
+  }, [tradingState.status, tradingState.currentOrder, dischargePower]);
+
+  // Update power history when idle (zero power)
+  useEffect(() => {
+    if (tradingState.status !== 'idle') return;
+
+    const timer = setInterval(() => {
+      setPowerHistory(prev => {
+        const newPoint = { time: Date.now(), power: 0 };
+        const updated = [...prev, newPoint];
+        return updated.slice(-300);
+      });
+    }, 1000); // Update every second
+
+    return () => clearInterval(timer);
+  }, [tradingState.status]);
+
+  // Force re-render every second when auto mode is running (for countdown display)
+  const [autoTick, setAutoTick] = useState(0);
+  useEffect(() => {
+    if (!autoRunning) return;
+    
+    const timer = setInterval(() => {
+      setAutoTick(prev => prev + 1);
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [autoRunning]);
 
   const maxStorage = 10;
 
@@ -246,32 +391,90 @@ function Trading() {
       return;
     }
 
-    const revenue = amount * (typeof tradingPrice === 'number' ? tradingPrice : 0);
+    if (tradingState.status === 'discharging') {
+      alert('Please wait for current discharge to complete!');
+      return;
+    }
 
-    setCurrentStorage(prev => prev - amount);
-    setWeeklyEarnings(prev => {
-      const updated = [...prev];
-      if (updated.length > 0) {
-        const lastIdx = updated.length - 1;
-        updated[lastIdx] = { ...updated[lastIdx], earnings: (updated[lastIdx].earnings || 0) + revenue };
-      }
-      return updated;
+    // Show confirmation modal
+    const price = typeof tradingPrice === 'number' ? tradingPrice : 0;
+    const realDuration = (amount / dischargePower) * 3600 * 1000; // ms
+    const demoDuration = realDuration / DEMO_SPEED;
+    
+    setPendingOrder({
+      amount,
+      price,
+      revenue: amount * price,
+      realDuration,
+      demoDuration,
+    });
+    setShowConfirmModal(true);
+  };
+
+  const confirmDischarge = () => {
+    if (!pendingOrder) return;
+
+    const { amount, price, revenue, demoDuration } = pendingOrder;
+    const orderId = Date.now();
+
+    // Start discharge process
+    setTradingState({
+      status: 'discharging',
+      currentOrder: {
+        id: orderId,
+        amount,
+        price,
+        startTime: Date.now(),
+        duration: demoDuration,
+        progress: 0,
+        discharged: 0,
+        revenue: 0,
+      },
+      queue: tradingState.queue,
     });
 
-    const now = new Date();
-    const newTrade = {
-      ts: now.getTime(),
-      amount: amount,
-      price: typeof tradingPrice === 'number' ? tradingPrice : 0,
-      revenue: parseFloat((amount * (typeof tradingPrice === 'number' ? tradingPrice : 0)).toFixed(2))
-    };
-
-    setTradeHistory(prev => [newTrade, ...prev.slice(0, 99)]); // cap to 100
     setSellAmount('');
+    setShowConfirmModal(false);
+    setPendingOrder(null);
 
-    setToastMessage('Trade successful!');
+    setToastMessage('Discharge started!');
     setShowToast(true);
-    setTimeout(() => setShowToast(false), 2600);
+    setTimeout(() => setShowToast(false), 2000);
+  };
+
+  const cancelDischarge = () => {
+    if (tradingState.status !== 'discharging') return;
+    
+    // Partial completion - add to history
+    const { currentOrder } = tradingState;
+    if (currentOrder && currentOrder.discharged > 0) {
+      const now = Date.now();
+      setTradeHistory(prev => [{
+        ts: now,
+        amount: currentOrder.discharged,
+        price: currentOrder.price,
+        revenue: currentOrder.revenue,
+      }, ...prev].slice(0, 99));
+
+      setWeeklyEarnings(prev => {
+        const updated = [...prev];
+        if (updated.length > 0) {
+          const lastIdx = updated.length - 1;
+          updated[lastIdx] = { ...updated[lastIdx], earnings: (updated[lastIdx].earnings || 0) + currentOrder.revenue };
+        }
+        return updated;
+      });
+    }
+
+    setTradingState({
+      status: 'idle',
+      currentOrder: null,
+      queue: tradingState.queue,
+    });
+
+    setToastMessage('Discharge cancelled');
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2000);
   };
 
   const storagePercentage = (currentStorage / maxStorage) * 100;
@@ -281,7 +484,34 @@ function Trading() {
     setSellAmount(amount.toFixed(1));
   };
 
+  // Format duration to HH:MM:SS
+  const formatDuration = (ms) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Get status display info
+  const getStatusInfo = () => {
+    switch (tradingState.status) {
+      case 'discharging':
+        return { label: 'Discharging', color: 'text-trade-up', dotClass: 'status-dot-discharging' };
+      case 'completed':
+        return { label: 'Completed', color: 'text-green-400', dotClass: 'status-dot-completed' };
+      case 'idle':
+      default:
+        return { label: 'Idle', color: 'text-text-muted', dotClass: 'status-dot-idle' };
+    }
+  };
+
   const pad = (n) => n.toString().padStart(2, '0');
+
   const fmtLabel = (d) => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; // MM-DD
   const monthShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -406,6 +636,76 @@ function Trading() {
                 Current price is high — consider selling to maximize revenue.
               </p>
             </div>
+
+            {/* Trading Status Card (new!) */}
+            <div className={`bg-dark-card border border-dark-border p-6 rounded-lg shadow-card ${tradingState.status === 'discharging' ? 'status-discharging' : ''}`}>
+              <h4 className="text-[11px] text-text-secondary/80 uppercase tracking-wider mb-3">Trading Status</h4>
+              
+              <div className="space-y-3">
+                {/* Status indicator */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-text-secondary">Status</span>
+                  <div className="flex items-center">
+                    <span className={`status-dot ${getStatusInfo().dotClass}`}></span>
+                    <span className={`text-sm font-semibold ${getStatusInfo().color}`}>
+                      {getStatusInfo().label}
+                    </span>
+                  </div>
+                </div>
+
+                {tradingState.status === 'discharging' && tradingState.currentOrder && (
+                  <>
+                    {/* Progress bar */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-text-secondary">Progress</span>
+                        <span className="text-xs font-mono text-text-primary">{tradingState.currentOrder.progress.toFixed(1)}%</span>
+                      </div>
+                      <div className="relative w-full bg-dark-inner rounded-full h-2 overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 progress-fill progress-animated rounded-full transition-all duration-300"
+                          style={{ width: `${tradingState.currentOrder.progress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    {/* Remaining time */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-text-secondary">Remaining</span>
+                      <span className="text-sm font-mono countdown-timer text-text-primary">
+                        {formatDuration(tradingState.currentOrder.duration - (Date.now() - tradingState.currentOrder.startTime))}
+                      </span>
+                    </div>
+
+                    {/* Discharge power */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-text-secondary">Power</span>
+                      <span className="text-sm font-mono text-trade-up">{dischargePower.toFixed(1)} kW</span>
+                    </div>
+
+                    {/* Real-time revenue */}
+                    <div className="flex items-center justify-between pt-2 border-t border-dark-border">
+                      <span className="text-sm text-text-secondary">Revenue</span>
+                      <span className="text-base font-bold font-mono text-tech-blue">
+                        ${tradingState.currentOrder.revenue.toFixed(2)} / ${(tradingState.currentOrder.amount * tradingState.currentOrder.price).toFixed(2)}
+                      </span>
+                    </div>
+
+                    {/* Cancel button */}
+                    <button
+                      onClick={cancelDischarge}
+                      className="w-full mt-2 px-3 py-2 text-sm font-medium text-trade-down bg-trade-down/10 border border-trade-down/30 rounded hover:bg-trade-down/20 transition-all"
+                    >
+                      Cancel Discharge
+                    </button>
+                  </>
+                )}
+
+                {tradingState.status === 'idle' && (
+                  <p className="text-xs text-text-muted text-center py-2">No active discharge</p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="lg:col-span-2 bg-dark-card border border-dark-border p-8 rounded-lg shadow-card">
@@ -450,10 +750,10 @@ function Trading() {
                 </div>
                 <button
                   onClick={handleSellElectricity}
-                  disabled={!sellAmount || tradingPrice === '...' || autoRunning}
+                  disabled={!sellAmount || tradingPrice === '...' || tradingState.status === 'discharging'}
                   className="w-full bg-tech-blue text-white font-bold py-4 px-6 rounded hover:bg-tech-blue/90 transition-all duration-300 shadow-glow-blue disabled:bg-dark-hover disabled:cursor-not-allowed disabled:shadow-none text-lg tracking-wide"
                 >
-                  Confirm Sell
+                  {tradingState.status === 'discharging' ? 'Discharging...' : 'Confirm Sell'}
                 </button>
               </div>
             ) : (
@@ -494,6 +794,7 @@ function Trading() {
                     <input type="number" step="1" value={autoConfig.cooldownSec}
                       onChange={(e)=>setAutoConfig(c=>({...c, cooldownSec: Math.max(1, parseInt(e.target.value)||1)}))}
                       className="w-full rounded-lg bg-dark-inner border border-dark-border text-text-primary focus:border-tech-blue focus:outline-none focus:ring-1 focus:ring-tech-blue p-2.5" />
+                    <p className="text-xs text-text-muted mt-1">Time between order triggers</p>
                   </div>
                   <div className="flex items-center gap-2 mt-6">
                     <input id="sim-price" type="checkbox" checked={autoConfig.simulatePrice}
@@ -504,9 +805,26 @@ function Trading() {
                 </div>
 
                 <div className="flex items-center justify-between bg-dark-inner border border-dark-border p-4 rounded-lg">
-                  <div className="text-sm text-text-secondary">
+                  <div className="text-sm text-text-secondary space-y-1">
                     <div>Next sell price: <span className="font-semibold font-mono tabular-nums text-text-primary">{nextSellPrice ? `$${nextSellPrice.toFixed(2)}` : '-'}</span></div>
                     <div className="text-text-muted">Levels: {gridLevels.length} • Step: {autoConfig.stepPct}% • Chunk: {autoConfig.chunkKwh} kWh</div>
+                    {autoRunning && (() => {
+                      const now = Date.now();
+                      const cooldownRemaining = Math.max(0, (autoConfig.cooldownSec || 0) * 1000 - (now - lastSellAt));
+                      
+                      if (cooldownRemaining > 0) {
+                        return (
+                          <div className="text-xs">
+                            <span className="text-warning">🔒 Cooldown:</span> <span className="font-mono text-text-primary">{formatDuration(cooldownRemaining)}</span>
+                          </div>
+                        );
+                      }
+                      return tradingState.status === 'idle' ? (
+                        <div className="text-xs text-trade-up">✅ Ready to trigger</div>
+                      ) : (
+                        <div className="text-xs text-tech-blue">⚡ Discharging...</div>
+                      );
+                    })()}
                   </div>
                   <div className="flex gap-2">
                     {!autoRunning ? (
@@ -518,51 +836,120 @@ function Trading() {
                   </div>
                 </div>
 
-                <p className="text-xs text-text-muted">Auto mode sells in tranches when price crosses each grid level. It does not auto-buy. Ensure you have sufficient storage.</p>
+                <p className="text-xs text-text-muted">
+                  <strong>⚡ Auto mode:</strong> Triggers gradual discharge when price crosses grid levels. Each order follows the same discharge process as manual mode.
+                  <br />
+                  <strong>⚠️ Note:</strong> Auto mode does not auto-buy. Ensure sufficient storage before starting.
+                </p>
               </div>
             )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-text-primary">{earningsTitle}</h3>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setEarningsRange('7d')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='7d'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>7D</button>
-                <button onClick={() => setEarningsRange('30d')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='30d'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>30D</button>
-                <button onClick={() => setEarningsRange('1y')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='1y'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>1Y</button>
-                <button onClick={() => setEarningsRange('custom')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='custom'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>Custom</button>
+          {/* Left column: Earnings + Power Monitor */}
+          <div className="space-y-6">
+            {/* Earnings Chart */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-text-primary">{earningsTitle}</h3>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEarningsRange('7d')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='7d'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>7D</button>
+                  <button onClick={() => setEarningsRange('30d')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='30d'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>30D</button>
+                  <button onClick={() => setEarningsRange('1y')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='1y'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>1Y</button>
+                  <button onClick={() => setEarningsRange('custom')} className={`px-3 py-1.5 rounded text-sm ${earningsRange==='custom'?'bg-tech-blue text-white':'bg-dark-bg border border-dark-border text-text-secondary hover:border-tech-blue/50'}`}>Custom</button>
+                </div>
+              </div>
+
+              {earningsRange === 'custom' && (
+                <div className="flex flex-wrap items-center gap-3 mb-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <label htmlFor="earn-start" className="text-text-secondary">Start</label>
+                    <input id="earn-start" type="date" value={customStart} onChange={(e)=>setCustomStart(e.target.value)} className="rounded-md bg-dark-bg border border-dark-border text-text-primary focus:border-tech-blue focus:ring-1 focus:ring-tech-blue px-2 py-1" />
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <label htmlFor="earn-end" className="text-text-secondary">End</label>
+                    <input id="earn-end" type="date" value={customEnd} onChange={(e)=>setCustomEnd(e.target.value)} className="rounded-md bg-dark-bg border border-dark-border text-text-primary focus:border-tech-blue focus:ring-1 focus:ring-tech-blue px-2 py-1" />
+                  </div>
+                  <span className="text-xs text-text-muted">Max 365 days</span>
+                </div>
+              )}
+
+              <div className="p-4 bg-dark-card border border-dark-border rounded-lg shadow-inner h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weeklyEarnings.map(d=> d.label? d : { label: d.day, earnings: d.earnings })}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2a3142" />
+                    <XAxis dataKey="label" tick={{ fill: '#9598a1' }} />
+                    <YAxis tickFormatter={(value) => `$${value}`} tick={{ fill: '#9598a1' }} />
+                    <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} labelStyle={{ color: '#e0e3eb' }} contentStyle={{ backgroundColor: '#1a1e2e', borderRadius: 8, border: '1px solid #2a3142' }} />
+                    <Line type="monotone" dataKey="earnings" stroke="#26a69a" strokeWidth={2} dot={{ r: 3, stroke: '#26a69a', fill: '#131722', strokeWidth: 2 }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
-            {earningsRange === 'custom' && (
-              <div className="flex flex-wrap items-center gap-3 mb-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <label htmlFor="earn-start" className="text-text-secondary">Start</label>
-                  <input id="earn-start" type="date" value={customStart} onChange={(e)=>setCustomStart(e.target.value)} className="rounded-md bg-dark-bg border border-dark-border text-text-primary focus:border-tech-blue focus:ring-1 focus:ring-tech-blue px-2 py-1" />
+            {/* Power Monitor Chart (new!) */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-text-primary">⚡ Real-Time Power Monitor</h3>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-sm bg-trade-up"></span>
+                    <span className="text-text-secondary">Discharging</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-sm bg-text-muted"></span>
+                    <span className="text-text-secondary">Idle</span>
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <label htmlFor="earn-end" className="text-text-secondary">End</label>
-                  <input id="earn-end" type="date" value={customEnd} onChange={(e)=>setCustomEnd(e.target.value)} className="rounded-md bg-dark-bg border border-dark-border text-text-primary focus:border-tech-blue focus:ring-1 focus:ring-tech-blue px-2 py-1" />
-                </div>
-                <span className="text-xs text-text-muted">Max 365 days</span>
               </div>
-            )}
 
-            <div className="p-4 bg-dark-card border border-dark-border rounded-lg shadow-inner h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weeklyEarnings.map(d=> d.label? d : { label: d.day, earnings: d.earnings })}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a3142" />
-                  <XAxis dataKey="label" tick={{ fill: '#9598a1' }} />
-                  <YAxis tickFormatter={(value) => `$${value}`} tick={{ fill: '#9598a1' }} />
-                  <Tooltip formatter={(value) => `$${Number(value).toFixed(2)}`} labelStyle={{ color: '#e0e3eb' }} contentStyle={{ backgroundColor: '#1a1e2e', borderRadius: 8, border: '1px solid #2a3142' }} />
-                  <Line type="monotone" dataKey="earnings" stroke="#26a69a" strokeWidth={2} dot={{ r: 3, stroke: '#26a69a', fill: '#131722', strokeWidth: 2 }} activeDot={{ r: 5 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="p-4 bg-dark-card border border-dark-border rounded-lg shadow-inner h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={powerHistory.map(p => ({ 
+                    time: new Date(p.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    power: p.power 
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2a3142" />
+                    <XAxis 
+                      dataKey="time" 
+                      tick={{ fill: '#9598a1', fontSize: 10 }} 
+                      interval="preserveStartEnd"
+                      minTickGap={50}
+                    />
+                    <YAxis 
+                      tickFormatter={(value) => `${value} kW`} 
+                      tick={{ fill: '#9598a1' }}
+                      domain={[0, 'auto']}
+                    />
+                    <Tooltip 
+                      formatter={(value) => `${Number(value).toFixed(2)} kW`}
+                      labelStyle={{ color: '#e0e3eb' }} 
+                      contentStyle={{ backgroundColor: '#1a1e2e', borderRadius: 8, border: '1px solid #2a3142' }}
+                      className="power-tooltip"
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="power" 
+                      stroke="#26a69a" 
+                      strokeWidth={2} 
+                      dot={false}
+                      animationDuration={300}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between text-xs">
+                <span className="text-text-muted">Last 5 minutes • Updates every second</span>
+                <span className={`font-mono font-semibold ${tradingState.status === 'discharging' ? 'text-trade-up' : 'text-text-muted'}`}>
+                  {tradingState.status === 'discharging' ? `${dischargePower.toFixed(1)} kW` : '0.0 kW'}
+                </span>
+              </div>
             </div>
           </div>
 
+          {/* Right column: Trade History */}
           <div>
             <h3 className="text-xl font-bold mb-4 text-text-primary">Trade History</h3>
             <div className="bg-dark-card border border-dark-border rounded-lg overflow-hidden shadow-card">
@@ -640,6 +1027,59 @@ function Trading() {
         <div className="fixed bottom-6 right-6 flex items-center gap-2 bg-dark-card/95 text-text-primary py-3 px-4 rounded-lg shadow-glow-blue border border-tech-blue/50 backdrop-blur">
           <span>✅</span>
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && pendingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-overlay" onClick={() => setShowConfirmModal(false)}>
+          <div className="modal-content bg-dark-panel border border-dark-border rounded-xl p-6 max-w-md w-full mx-4 shadow-card" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold text-text-primary mb-4">Confirm Transaction</h3>
+            
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between items-center">
+                <span className="text-text-secondary">Amount:</span>
+                <span className="font-bold text-text-primary">{pendingOrder.amount.toFixed(1)} kWh</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-text-secondary">Price:</span>
+                <span className="font-bold text-text-primary">${pendingOrder.price.toFixed(2)}/kWh</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-dark-border">
+                <span className="text-text-secondary">Total Revenue:</span>
+                <span className="font-bold text-tech-blue text-lg">${pendingOrder.revenue.toFixed(2)}</span>
+              </div>
+
+              <div className="mt-4 p-3 bg-dark-card border border-dark-border rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm text-text-secondary">⚡ Discharge Power:</span>
+                  <span className="text-sm font-mono text-trade-up">{dischargePower.toFixed(1)} kW</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-text-secondary">⏱️ Estimated Time:</span>
+                  <span className="text-sm font-mono text-text-primary">
+                    ~{formatDuration(pendingOrder.realDuration)} 
+                    <span className="text-text-muted ml-1">(Demo: {formatDuration(pendingOrder.demoDuration)})</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 px-4 py-2 bg-dark-inner border border-dark-border text-text-secondary rounded-lg hover:border-text-secondary/50 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDischarge}
+                className="flex-1 px-4 py-2 bg-tech-blue text-white rounded-lg hover:bg-tech-blue/90 transition-all shadow-glow-blue"
+              >
+                Start Discharge
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </main>
