@@ -1,0 +1,259 @@
+/* Tailwind v4 基础导入 */
+@import "tailwindcss";
+
+/* FinTech 深色主题全局样式 */
+body {
+  font-family: 'Inter', 'Roboto', 'Noto Sans SC', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background-color: #0a0e27;
+  color: #e0e3eb;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Inter', 'Roboto', 'Noto Sans SC', sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: #0a0e27;
+}
+
+/* 自定义滚动条 - 深色主题 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #131722;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a3142;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2962ff;
+}
+
+/* 动画效果 */
+.fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Blob动画 - 用于Hero背景 */
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+.animation-delay-4000 {
+  animation-delay: 4s;
+}
+
+/* Toast动画 */
+@keyframes toast-in-out {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+}
+
+/* --- Global dark UI refinements (align with demo.html) --- */
+/* Controls: inputs/selects/textarea */
+input[type="text"], input[type="number"], input[type="email"], input[type="search"],
+select, textarea {
+  appearance: none;
+  background-color: #1e2433; /* dark.inner */
+  border: 1px solid #2a3142; /* dark.border */
+  color: #e5e7eb;            /* text.primary */
+  border-radius: 10px;
+  padding: 0.625rem 0.75rem; /* 10px 12px */
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+}
+
+input::placeholder, textarea::placeholder { color: #6b7280; }
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #2962ff;
+  box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.18);
+}
+
+/* Select arrow + padding */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 2.25rem; /* room for arrow */
+}
+select:hover { border-color: #2a3750; }
+
+/* Buttons: default smoothing without touching specific Tailwind variants */
+button {
+  border-radius: 10px;
+  transition: background-color .2s ease, box-shadow .2s ease, border-color .2s ease, color .2s ease, transform .06s ease;
+}
+button:active { transform: translateY(0.5px); }
+button:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(41, 98, 255, 0.18); }
+
+/* Primary button polish: upgrade bg-tech-blue look */
+.bg-tech-blue {
+  background-image: linear-gradient(180deg, #3a79ff, #2962ff) !important;
+  box-shadow: 0 8px 26px rgba(41, 98, 255, 0.25), inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+.bg-tech-blue:hover { background-image: linear-gradient(180deg, #4b87ff, #3a79ff) !important; }
+.bg-tech-blue:active { transform: translateY(0.5px); }
+
+/* Subtle page glow for more natural depth */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(60px);
+  opacity: 0.25;
+}
+body::before {
+  top: -10%; left: -5%; width: 420px; height: 420px;
+  background: radial-gradient(ellipse at center, rgba(41,98,255,0.35), rgba(0,0,0,0));
+}
+body::after {
+  bottom: -12%; right: -8%; width: 460px; height: 460px;
+  background: radial-gradient(ellipse at center, rgba(0,188,212,0.22), rgba(0,0,0,0));
+}
+
+/* Panels & Cards: subtle gradient depth */
+.bg-dark-panel {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0));
+  border-radius: 14px;
+}
+.bg-dark-card {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0));
+  border-radius: 12px;
+}
+
+/* Elevation polish */
+.shadow-card { box-shadow: 0 6px 22px rgba(0,0,0,0.35); }
+
+/* Tables: header tint + hover state */
+.table-dark thead, .bg-dark-card > .table thead, .bg-dark-panel > .table thead, thead {
+  background: rgba(30, 36, 51, 0.65);
+}
+tbody tr { transition: background-color .18s ease; }
+tbody tr:hover { background-color: rgba(41, 98, 255, 0.045); }
+
+/* Table polish */
+.table, table { border-collapse: separate; border-spacing: 0; }
+thead th { font-weight: 700; letter-spacing: .04em; }
+tbody tr:hover td { border-color: rgba(41, 98, 255, 0.35) !important; }
+
+/* Navbar slight depth */
+header .backdrop-blur-md { box-shadow: 0 6px 22px rgba(0,0,0,0.35); }
+
+/* Links & navbar hovers */
+a { transition: color .18s ease, opacity .18s ease; }
+a:hover { color: #e5e7eb; }
+header a:hover { color: #e5e7eb; }
+
+/* Recommendation/notice blocks */
+.border-l-4.border-tech-blue { box-shadow: inset 0 0 0 1px rgba(31,38,53,0.9); }
+
+/* Toasts */
+#toast, .toast {
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.45);
+}
+
+/* Gradual section spacing tweaks */
+section { scroll-margin-top: 80px; }
+
+/* Fine-tune charts container for crisper borders */
+.chart-container, .lw-chart, [data-chart] {
+  border-radius: 12px;
+  border: 1px solid #2a3142;
+}
+
+/* Selection / accessibility */
+::selection { background: rgba(41,98,255,.35); color: #fff; }
+a:focus-visible, button:focus-visible { outline: 2px solid #2962ff; outline-offset: 2px; }
+
+/* Headings nuance */
+h1, h2 { letter-spacing: -0.02em; }
+h3 { letter-spacing: -0.01em; }
+
+/* Use softer border color across containers */
+.bg-dark-panel, .bg-dark-card, .chart-container, .lw-chart, [data-chart],
+.border-dark-border, .border-dark-border * {
+  border-color: #1f2635 !important;
+}
+
+/* Inputs/selects consistent hover border */
+select:hover, input:hover, textarea:hover { border-color: #2a3750; }
+
+/* Semantic tinted surfaces for better area differentiation (like demo) */
+.surface-info { background: rgba(41, 98, 255, 0.08); border: 1px solid rgba(41, 98, 255, 0.22); }
+.surface-success { background: rgba(38, 166, 154, 0.10); border: 1px solid rgba(38, 166, 154, 0.24); }
+.surface-warning { background: rgba(251, 191, 36, 0.10); border: 1px solid rgba(251, 191, 36, 0.24); }
+.surface-danger { background: rgba(239, 83, 80, 0.10); border: 1px solid rgba(239, 83, 80, 0.24); }
+.text-info { color: #8fb1ff; }
+.text-success { color: #26a69a; }
+.text-warning { color: #fbbf24; }
+.text-danger { color: #ef5350; }
+
+/* Progress bar inside dark track: ensure visible height and minimal width */
+.bg-dark-inner > .bg-linear-to-r { display: block; height: 100%; min-width: 4px; border-radius: 9999px; }
+
+/* Explicit gradient for progress fill (fallback independent of Tailwind utilities) */
+.progress-fill {
+  background-image: linear-gradient(90deg, #2962ff 0%, #00bcd4 100%);
+}

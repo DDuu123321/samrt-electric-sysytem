@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Energy Dashboard - Electricity Price K-Line Trading System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #0a0e27;
+            color: #e5e7eb;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            background: #131722;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .timeframe-btn {
+            padding: 6px 12px;
+            border-radius: 4px;
+            background: #1e2433;
+            color: #9ca3af;
+            border: 1px solid #2a3142;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        .timeframe-btn:hover {
+            background: #2a3142;
+            color: #fff;
+        }
+        .timeframe-btn.active {
+            background: #2962ff;
+            color: #fff;
+            border-color: #2962ff;
+        }
+        .stat-card {
+            background: #131722;
+            border: 1px solid #2a3142;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .price-up {
+            color: #26a69a;
+        }
+        .price-down {
+            color: #ef5350;
+        }
+        select {
+            background: #1e2433;
+            border: 1px solid #2a3142;
+            color: #e5e7eb;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        select:focus {
+            outline: none;
+            border-color: #2962ff;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .success-toast {
+            animation: toast-in-out 3s ease-in-out forwards;
+        }
+        @keyframes toast-in-out {
+            0% { transform: translateY(100%); opacity: 0; }
+            15% { transform: translateY(0); opacity: 1; }
+            85% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(100%); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header / Navbar -->
+    <header class="bg-[#131722] border-b border-[#2a3142] sticky top-0 z-50">
+        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-2xl font-bold text-[#2962ff]">Logo Image</span>
+                    <h1 class="ml-3 text-lg font-bold text-white">Smart Energy Trading System</h1>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4">
+                        <a href="#overview" class="text-gray-400 hover:text-[#2962ff] px-3 py-2 rounded-md text-sm font-medium">Company Overview</a>
+                        <a href="#demo" class="text-gray-400 hover:text-[#2962ff] px-3 py-2 rounded-md text-sm font-medium">K-Line Chart</a>
+                        <a href="#trading" class="text-gray-400 hover:text-[#2962ff] px-3 py-2 rounded-md text-sm font-medium">Trading Center</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+
+        <!-- Section 1: Project Overview -->
+        <section id="overview" class="text-center mb-16 md:mb-24">
+            <h2 class="text-3xl md:text-4xl font-bold text-white mb-4">Australian Electricity Price Forecasting Platform</h2>
+            <p class="max-w-3xl mx-auto text-lg text-gray-400 mb-8">
+                Real-time monitoring of electricity price fluctuations across Australian regions, accurate to regional markets, supporting multi-period K-line analysis and AI electricity price forecasting
+            </p>
+            <div class="flex justify-center items-center space-x-6">
+                <div class="text-center">
+                    <p class="text-sm text-gray-500">Market Status</p>
+                    <p class="font-bold text-green-500">Trading</p>
+                </div>
+                <div class="border-l border-gray-700 h-10"></div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-500">Time</p>
+                    <p class="font-bold text-white" id="current-time">2025-10-20</p>
+                </div>
+                <div class="border-l border-gray-700 h-10"></div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-500">Active Markets</p>
+                    <p class="font-bold text-white">5 States • 47 Regions</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: K-Line Chart -->
+        <section id="demo" class="mb-16 md:mb-24">
+            <div class="bg-[#131722] rounded-2xl border border-[#2a3142] p-4 sm:p-6 lg:p-8">
+
+                <!-- Controls -->
+                <div class="mb-6 space-y-4">
+                    <!-- Location Selectors -->
+                    <div class="flex flex-wrap gap-4 items-center">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">State</label>
+                            <select id="state-select" class="w-48">
+                                <option value="NSW">New South Wales</option>
+                                <option value="VIC">Victoria</option>
+                                <option value="QLD">Queensland</option>
+                                <option value="SA">South Australia</option>
+                                <option value="WA">Western Australia</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-2">Region</label>
+                            <select id="region-select" class="w-64">
+                                <!-- Will be populated by JavaScript -->
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Timeframe Buttons -->
+                    <div class="flex flex-wrap gap-2">
+                        <span class="text-sm text-gray-400 mr-2 self-center">Timeframe:</span>
+                        <button class="timeframe-btn" data-timeframe="15m">15 Minutes</button>
+                        <button class="timeframe-btn" data-timeframe="30m">30 Minutes</button>
+                        <button class="timeframe-btn active" data-timeframe="1h">1 Hour</button>
+                        <button class="timeframe-btn" data-timeframe="6h">6 Hours</button>
+                        <button class="timeframe-btn" data-timeframe="12h">12 Hours</button>
+                        <button class="timeframe-btn" data-timeframe="1d">1 Day</button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                    <div class="stat-card">
+                        <h4 class="text-xs text-gray-500 mb-1">Current Price</h4>
+                        <p id="current-price" class="text-xl font-bold text-white">24.7 <span class="text-sm">c/kWh</span></p>
+                        <p id="price-change" class="text-xs price-up">+2.3 (+10.2%)</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4 class="text-xs text-gray-500 mb-1">Open</h4>
+                        <p id="open-price" class="text-lg font-bold text-gray-300">22.4</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4 class="text-xs text-gray-500 mb-1">High</h4>
+                        <p id="high-price" class="text-lg font-bold price-up">35.2</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4 class="text-xs text-gray-500 mb-1">Low</h4>
+                        <p id="low-price" class="text-lg font-bold price-down">10.8</p>
+                    </div>
+                    <div class="stat-card">
+                        <h4 class="text-xs text-gray-500 mb-1">Volume</h4>
+                        <p id="volume" class="text-lg font-bold text-gray-300">1.2M kWh</p>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="chart-container">
+                    <canvas id="klineChart"></canvas>
+                </div>
+
+                <!-- Recommendation -->
+                <div class="mt-6 p-4 bg-[#1e2433] border-l-4 border-[#2962ff] rounded-r-lg">
+                    <h4 class="font-bold text-[#2962ff] mb-2">💡 Smart Trading Signal</h4>
+                    <p id="recommendation-text" class="text-gray-300">Based on K-line pattern analysis, currently in an upward trend. Forecast indicates electricity prices will continue to rise in the next 2 hours. Recommend selling electricity during peak hours.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Trading Center -->
+        <section id="trading" class="mb-16">
+            <div class="bg-[#131722] rounded-2xl border border-[#2a3142] p-4 sm:p-6 lg:p-8">
+                <h3 class="text-2xl font-bold text-white mb-6">Electricity Trading Center</h3>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Left Sidebar -->
+                    <div class="lg:col-span-1 space-y-6">
+                        <div class="stat-card text-center">
+                            <h4 class="text-sm text-gray-500">Grid Purchase Price (AUD/kWh)</h4>
+                            <p id="trading-price" class="text-4xl font-bold price-up">0.247</p>
+                            <button id="refresh-price-btn" class="mt-2 text-sm text-[#2962ff] hover:text-[#5088ff]">🔄 Refresh Price</button>
+                        </div>
+
+                        <div class="stat-card">
+                            <h4 class="text-sm text-gray-500 mb-2">Current Storage</h4>
+                            <div class="w-full bg-[#1e2433] rounded-full h-4">
+                                <div id="storage-bar" class="bg-[#2962ff] h-4 rounded-full transition-all duration-500" style="width: 85%;"></div>
+                            </div>
+                            <p id="storage-text" class="text-right text-sm mt-1 font-medium text-gray-300">8.5 / 10 kWh</p>
+                        </div>
+
+                        <div class="p-4 rounded-lg bg-[#1a3a1f] border-l-4 border-green-500">
+                            <h4 class="font-bold text-green-400">✅ Trading Recommendation</h4>
+                            <p class="text-green-300 text-sm mt-1">Electricity price at high level, recommend selling</p>
+                        </div>
+                    </div>
+
+                    <!-- Trading Panel -->
+                    <div class="lg:col-span-2 stat-card">
+                        <h3 class="text-xl font-bold text-white mb-4">Trading Operations</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label for="sell-amount" class="block text-sm font-medium text-gray-400 mb-2">Sell Amount (kWh)</label>
+                                <input type="number" id="sell-amount" class="w-full bg-[#1e2433] border border-[#2a3142] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#2962ff]" placeholder="e.g., 2.5">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Estimated Revenue</span>
+                                <p id="estimated-revenue" class="text-3xl font-bold text-white">$0.00</p>
+                            </div>
+                            <button id="sell-btn" class="w-full bg-[#2962ff] text-white font-bold py-3 px-4 rounded-lg hover:bg-[#5088ff] transition duration-300 disabled:bg-gray-700">
+                                Confirm Sale
+                            </button>
+                        </div>
+
+                        <!-- Trading History -->
+                        <div class="mt-8">
+                            <h4 class="text-lg font-bold text-white mb-4">Recent Trades</h4>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="text-xs text-gray-500 uppercase border-b border-[#2a3142]">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left">Time</th>
+                                            <th class="px-4 py-3 text-right">Amount (kWh)</th>
+                                            <th class="px-4 py-3 text-right">Price</th>
+                                            <th class="px-4 py-3 text-right">Revenue</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="history-table" class="text-gray-300">
+                                        <tr class="border-b border-[#2a3142]">
+                                            <td class="px-4 py-3">Today 18:05</td>
+                                            <td class="px-4 py-3 text-right font-medium">2.0</td>
+                                            <td class="px-4 py-3 text-right">$0.247</td>
+                                            <td class="px-4 py-3 text-right font-bold price-up">$0.49</td>
+                                        </tr>
+                                        <tr class="border-b border-[#2a3142]">
+                                            <td class="px-4 py-3">Yesterday 19:10</td>
+                                            <td class="px-4 py-3 text-right font-medium">3.5</td>
+                                            <td class="px-4 py-3 text-right">$0.280</td>
+                                            <td class="px-4 py-3 text-right font-bold price-up">$0.98</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-3 px-6 rounded-lg shadow-xl text-sm font-medium" style="opacity: 0; transform: translateY(100%);">
+        ✅ Transaction Successful!
+    </div>
+
+    <script>
+        // Australian Regions Data
+        const regionData = {
+            NSW: [
+                'Sydney CBD', 'Parramatta', 'Newcastle', 'Wollongong', 'Central Coast',
+                'Blue Mountains', 'Penrith', 'Blacktown', 'Liverpool', 'Campbelltown'
+            ],
+            VIC: [
+                'Melbourne CBD', 'Geelong', 'Ballarat', 'Bendigo', 'Shepparton',
+                'Mildura', 'Warrnambool', 'Dandenong', 'Frankston', 'Ringwood'
+            ],
+            QLD: [
+                'Brisbane CBD', 'Gold Coast', 'Sunshine Coast', 'Townsville', 'Cairns',
+                'Toowoomba', 'Mackay', 'Rockhampton', 'Bundaberg', 'Hervey Bay'
+            ],
+            SA: [
+                'Adelaide CBD', 'Port Adelaide', 'Mount Gambier', 'Whyalla', 'Murray Bridge',
+                'Port Lincoln', 'Gawler', 'Victor Harbor', 'Port Pirie', 'Salisbury'
+            ],
+            WA: [
+                'Perth CBD', 'East Perth', 'Fremantle', 'Mandurah', 'Bunbury',
+                'Kalgoorlie', 'Geraldton', 'Albany', 'Rockingham', 'Joondalup'
+            ]
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            let klineChartInstance;
+            let currentTimeframe = '1h';
+            let currentState = 'NSW';
+            let currentRegion = 'Sydney CBD';
+            let currentStorage = 8.5;
+            const maxStorage = 10;
+
+            // Update current time
+            setInterval(() => {
+                document.getElementById('current-time').textContent = new Date().toLocaleString('en-US');
+            }, 1000);
+
+            // Initialize region selector
+            function updateRegionOptions() {
+                const regionSelect = document.getElementById('region-select');
+                regionSelect.innerHTML = '';
+                regionData[currentState].forEach(region => {
+                    const option = document.createElement('option');
+                    option.value = region;
+                    option.textContent = region;
+                    regionSelect.appendChild(option);
+                });
+                currentRegion = regionData[currentState][0];
+            }
+
+            // Generate mock K-line data
+            function generateKlineData(timeframe) {
+                const intervals = {
+                    '15m': { ms: 15 * 60 * 1000, count: 96 },      // 24 hours of data
+                    '30m': { ms: 30 * 60 * 1000, count: 48 },      // 24 hours of data
+                    '1h': { ms: 60 * 60 * 1000, count: 48 },       // 2 days of data
+                    '6h': { ms: 6 * 60 * 60 * 1000, count: 60 },   // 15 days of data
+                    '12h': { ms: 12 * 60 * 60 * 1000, count: 60 }, // 30 days of data
+                    '1d': { ms: 24 * 60 * 60 * 1000, count: 90 }   // 90 days of data
+                };
+
+                const config = intervals[timeframe];
+                const data = [];
+                const now = new Date();
+                let lastClose = 20 + Math.random() * 10;
+
+                for (let i = config.count; i >= 0; i--) {
+                    const time = new Date(now - i * config.ms);
+                    const open = lastClose + (Math.random() - 0.5) * 2;
+                    const volatility = 3 + Math.random() * 3;
+                    const high = open + Math.random() * volatility;
+                    const low = open - Math.random() * volatility;
+                    const close = low + Math.random() * (high - low);
+
+                    data.push({
+                        x: time.getTime(),
+                        o: parseFloat(open.toFixed(2)),
+                        h: parseFloat(high.toFixed(2)),
+                        l: parseFloat(low.toFixed(2)),
+                        c: parseFloat(close.toFixed(2))
+                    });
+
+                    lastClose = close;
+                }
+
+                return data;
+            }
+
+            // Generate prediction data (future 10 periods)
+            function generatePredictionData(historicalData, timeframe, periods = 10) {
+                const config = {
+                    '15m': 15 * 60 * 1000,
+                    '30m': 30 * 60 * 1000,
+                    '1h': 60 * 60 * 1000,
+                    '6h': 6 * 60 * 60 * 1000,
+                    '12h': 12 * 60 * 60 * 1000,
+                    '1d': 24 * 60 * 60 * 1000
+                };
+
+                const interval = config[timeframe];
+                const lastCandle = historicalData[historicalData.length - 1];
+                const predictions = [];
+                let lastPrice = lastCandle.c;
+
+                for (let i = 1; i <= periods; i++) {
+                    const time = lastCandle.x + i * interval;
+                    const trend = (Math.random() - 0.3) * 2; // Slightly upward trend
+                    const predicted = lastPrice + trend;
+                    predictions.push({
+                        x: time,
+                        y: parseFloat(predicted.toFixed(2))
+                    });
+                    lastPrice = predicted;
+                }
+
+                return predictions;
+            }
+
+            // Draw candlestick manually on canvas
+            function drawCandlestick(ctx, x, y, width, open, high, low, close, chartArea) {
+                const isUp = close >= open;
+                const color = isUp ? '#26a69a' : '#ef5350';
+
+                // Calculate positions
+                const bodyTop = Math.min(open, close);
+                const bodyBottom = Math.max(open, close);
+                const bodyHeight = Math.abs(close - open);
+
+                // Draw wick (high-low line)
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, high);
+                ctx.lineTo(x, low);
+                ctx.stroke();
+
+                // Draw body (open-close rectangle)
+                ctx.fillStyle = isUp ? color : color;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+
+                if (bodyHeight < 0.5) {
+                    // Very small body, draw as a line
+                    ctx.beginPath();
+                    ctx.moveTo(x - width / 2, open);
+                    ctx.lineTo(x + width / 2, open);
+                    ctx.stroke();
+                } else {
+                    const rectX = x - width / 2;
+                    const rectY = bodyTop;
+                    const rectHeight = bodyHeight;
+
+                    if (isUp) {
+                        ctx.fillRect(rectX, rectY, width, rectHeight);
+                    } else {
+                        ctx.fillRect(rectX, rectY, width, rectHeight);
+                    }
+                    ctx.strokeRect(rectX, rectY, width, rectHeight);
+                }
+            }
+
+            // Create K-line Chart with custom plugin
+            function createKlineChart(timeframe) {
+                const canvas = document.getElementById('klineChart');
+                const ctx = canvas.getContext('2d');
+
+                if (klineChartInstance) {
+                    klineChartInstance.destroy();
+                }
+
+                const klineData = generateKlineData(timeframe);
+                const predictionData = generatePredictionData(klineData, timeframe);
+                const latest = klineData[klineData.length - 1];
+
+                // Update stats
+                document.getElementById('current-price').innerHTML = `${latest.c} <span class="text-sm">c/kWh</span>`;
+                const change = latest.c - klineData[0].o;
+                const changePercent = ((change / klineData[0].o) * 100).toFixed(2);
+                document.getElementById('price-change').innerHTML = `${change > 0 ? '+' : ''}${change.toFixed(2)} (${changePercent}%)`;
+                document.getElementById('price-change').className = change > 0 ? 'text-xs price-up' : 'text-xs price-down';
+                document.getElementById('open-price').textContent = klineData[0].o.toFixed(2);
+                document.getElementById('high-price').textContent = Math.max(...klineData.map(d => d.h)).toFixed(2);
+                document.getElementById('low-price').textContent = Math.min(...klineData.map(d => d.l)).toFixed(2);
+                document.getElementById('volume').textContent = (Math.random() * 2 + 0.5).toFixed(1) + 'M kWh';
+                document.getElementById('trading-price').textContent = (latest.c / 100).toFixed(3);
+
+                // Custom plugin to draw candlesticks
+                const candlestickPlugin = {
+                    id: 'candlestick',
+                    afterDatasetsDraw(chart) {
+                        const { ctx, chartArea, scales } = chart;
+                        const xScale = scales.x;
+                        const yScale = scales.y;
+                        const meta = chart.getDatasetMeta(0);
+
+                        klineData.forEach((candle, index) => {
+                            const x = xScale.getPixelForValue(candle.x);
+                            const high = yScale.getPixelForValue(candle.h);
+                            const low = yScale.getPixelForValue(candle.l);
+                            const open = yScale.getPixelForValue(candle.o);
+                            const close = yScale.getPixelForValue(candle.c);
+
+                            const width = (chartArea.width / klineData.length) * 0.6;
+
+                            drawCandlestick(ctx, x, null, width, open, high, low, close, chartArea);
+                        });
+                    }
+                };
+
+                // Create chart
+                klineChartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: [
+                            {
+                                label: 'Historical Price',
+                                data: klineData.map(d => ({ x: d.x, y: d.c })),
+                                borderColor: 'transparent',
+                                backgroundColor: 'transparent',
+                                pointRadius: 0,
+                                showLine: false
+                            },
+                            {
+                                label: 'Forecast Price',
+                                data: predictionData,
+                                borderColor: '#fbbf24',
+                                backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                                borderWidth: 2,
+                                borderDash: [5, 5],
+                                pointRadius: 3,
+                                pointBackgroundColor: '#fbbf24',
+                                fill: false,
+                                tension: 0.3
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    color: '#9ca3af',
+                                    font: { size: 12 },
+                                    usePointStyle: true,
+                                    filter: function(item) {
+                                        return item.text !== 'Historical Price';
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: '#1e2433',
+                                titleColor: '#fff',
+                                bodyColor: '#9ca3af',
+                                borderColor: '#2a3142',
+                                borderWidth: 1,
+                                padding: 12,
+                                displayColors: false,
+                                callbacks: {
+                                    title: function(context) {
+                                        const date = new Date(context[0].parsed.x);
+                                        return date.toLocaleString('en-US');
+                                    },
+                                    afterTitle: function() {
+                                        return `${currentState} - ${currentRegion}`;
+                                    },
+                                    label: function(context) {
+                                        const idx = context.dataIndex;
+                                        if (context.datasetIndex === 0 && idx < klineData.length) {
+                                            const kline = klineData[idx];
+                                            const change = kline.c - kline.o;
+                                            const changePercent = ((change / kline.o) * 100).toFixed(2);
+                                            return [
+                                                `Open: ${kline.o.toFixed(2)} c/kWh`,
+                                                `High: ${kline.h.toFixed(2)} c/kWh`,
+                                                `Low: ${kline.l.toFixed(2)} c/kWh`,
+                                                `Close: ${kline.c.toFixed(2)} c/kWh`,
+                                                `Change: ${change > 0 ? '+' : ''}${change.toFixed(2)} (${changePercent}%)`
+                                            ];
+                                        } else if (context.datasetIndex === 1) {
+                                            return `Forecast: ${context.parsed.y.toFixed(2)} c/kWh`;
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                grid: {
+                                    color: '#2a3142',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    color: '#9ca3af',
+                                    maxRotation: 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: 12,
+                                    callback: function(value) {
+                                        const date = new Date(value);
+                                        if (timeframe === '15m' || timeframe === '30m' || timeframe === '1h') {
+                                            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                                        } else if (timeframe === '6h' || timeframe === '12h') {
+                                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' });
+                                        } else {
+                                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                        }
+                                    }
+                                }
+                            },
+                            y: {
+                                grid: {
+                                    color: '#2a3142',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    color: '#9ca3af',
+                                    callback: value => `${value.toFixed(1)} c`
+                                }
+                            }
+                        }
+                    },
+                    plugins: [candlestickPlugin]
+                });
+            }
+
+            // Event Listeners
+            document.getElementById('state-select').addEventListener('change', (e) => {
+                currentState = e.target.value;
+                updateRegionOptions();
+                createKlineChart(currentTimeframe);
+            });
+
+            document.getElementById('region-select').addEventListener('change', (e) => {
+                currentRegion = e.target.value;
+                createKlineChart(currentTimeframe);
+            });
+
+            document.querySelectorAll('.timeframe-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentTimeframe = e.target.dataset.timeframe;
+                    createKlineChart(currentTimeframe);
+                });
+            });
+
+            // Trading functions
+            const updateTradingUI = () => {
+                const percentage = (currentStorage / maxStorage) * 100;
+                document.getElementById('storage-bar').style.width = `${percentage}%`;
+                document.getElementById('storage-text').textContent = `${currentStorage.toFixed(1)} / ${maxStorage} kWh`;
+
+                const amount = parseFloat(document.getElementById('sell-amount').value) || 0;
+                const price = parseFloat(document.getElementById('trading-price').textContent);
+                document.getElementById('estimated-revenue').textContent = `$${(amount * price).toFixed(2)}`;
+            };
+
+            document.getElementById('sell-amount').addEventListener('input', updateTradingUI);
+
+            document.getElementById('refresh-price-btn').addEventListener('click', () => {
+                createKlineChart(currentTimeframe);
+            });
+
+            document.getElementById('sell-btn').addEventListener('click', () => {
+                const amount = parseFloat(document.getElementById('sell-amount').value);
+                if (!amount || amount <= 0 || amount > currentStorage) {
+                    alert('Please enter a valid sell amount!');
+                    return;
+                }
+
+                const price = parseFloat(document.getElementById('trading-price').textContent);
+                const revenue = amount * price;
+
+                currentStorage -= amount;
+                updateTradingUI();
+
+                const tableBody = document.getElementById('history-table');
+                const newRow = `<tr class="border-b border-[#2a3142] fade-in">
+                    <td class="px-4 py-3">${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</td>
+                    <td class="px-4 py-3 text-right font-medium">${amount.toFixed(1)}</td>
+                    <td class="px-4 py-3 text-right">$${price.toFixed(3)}</td>
+                    <td class="px-4 py-3 text-right font-bold price-up">$${revenue.toFixed(2)}</td>
+                </tr>`;
+                tableBody.insertAdjacentHTML('afterbegin', newRow);
+                if (tableBody.rows.length > 5) {
+                    tableBody.deleteRow(5);
+                }
+
+                document.getElementById('sell-amount').value = '';
+
+                const toast = document.getElementById('toast');
+                toast.classList.add('success-toast');
+                setTimeout(() => toast.classList.remove('success-toast'), 3000);
+            });
+
+            // Initialize
+            updateRegionOptions();
+            createKlineChart(currentTimeframe);
+            updateTradingUI();
+        });
+    </script>
+</body>
+</html>
