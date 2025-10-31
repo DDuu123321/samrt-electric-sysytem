@@ -1,21 +1,22 @@
-# ⚡ Smart Energy Dashboard
+# Smart Energy Dashboard
 
-基于 React + Vite + Tailwind CSS v4 的智能能源管理前端应用。提供电价预测、交易中心与可视化分析，面向拥有太阳能/储能设备的家庭或小型能源用户。
+A modern smart energy management frontend application built with React, Vite, and Tailwind CSS v4.  
+It provides electricity price forecasting, trading center, and visualization analytics, designed for households or small energy users with solar or energy storage systems.
 
-## 功能特性
-- 电价预测：支持多时间范围的预测/实际对比曲线
-- 电力交易：售电操作面板、价格刷新、收益估算、历史记录
-- 状态与统计：当前价格/均价/峰值/谷值等信息卡片
-- 数据可视化：响应式折线图、柱状图与交互式提示
-- 响应式布局：桌面端与移动端良好体验
+## Features
+- **Electricity Price Forecasting**: Supports multi-range prediction and real vs. actual comparison charts.  
+- **Energy Trading**: Includes trading panel, price refresh, profit estimation, and history tracking.  
+- **Status & Statistics**: Displays current price, average, peak, and off-peak information cards.  
+- **Data Visualization**: Responsive line and bar charts with interactive tooltips.  
+- **Responsive Layout**: Optimized for both desktop and mobile devices.
 
-## 技术栈
-- React 19 + React Router
-- Vite 7（开发与构建）
-- Tailwind CSS 4（基于 PostCSS）
-- Recharts（图表）
+## Tech Stack
+- React 19 + React Router  
+- Vite 7 (Development & Build Tool)  
+- Tailwind CSS 4 (Based on PostCSS)  
+- Recharts (Charts and Data Visualization)
 
-## 目录结构
+## Project Structure
 ```
 smart-energy-dashboard/
   smart-energy-dashboard/
@@ -42,46 +43,30 @@ smart-energy-dashboard/
         Trading.jsx
 ```
 
-## 安装与运行
-要求：Node.js >= 18（建议 LTS）
+## Installation & Setup
+**Requirements:** Node.js >= 18 (LTS recommended)
 
-1. 安装依赖
+1. Install dependencies  
 ```
 npm install
 ```
 
-2. 启动开发服务器（默认端口 5173）
+2. Start the development server (default port: 5173)  
 ```
 npm run dev
 ```
 
-3. 构建生产包
+3. Build for production  
 ```
 npm run build
 ```
 
-4. 预览生产包
+4. Preview production build  
 ```
 npm run preview
 ```
 
-## 配置要点
-- Tailwind v4：在 `src/index.css` 顶部使用 `@import "tailwindcss"` 引入，具体扫描范围见 `tailwind.config.js` 的 `content`。
-- PostCSS：配置于 `postcss.config.js`（`@tailwindcss/postcss` + `autoprefixer`）。
-- 字体引入：通过 `index.html` 中的 `<link>` 加载 Web 字体，避免在 CSS 中使用 `@import` 导致 PostCSS 指令顺序报错。
-
-## 可用脚本
-- `npm run dev`：本地开发
-- `npm run build`：生产构建（输出至 `dist/`）
-- `npm run preview`：预览构建结果
-
-## 常见问题
-- 样式未生效或“散架”：
-  - 确认 `src/index.css` 顶部是 `@import "tailwindcss"`；
-  - 确认 `tailwind.config.js` 的 `content` 包含 `./index.html` 与 `./src/**/*.{js,ts,jsx,tsx}`；
-  - 字体请在 `index.html` 以 `<link>` 方式引入；
-  - 重启开发服务器并强制刷新浏览器缓存（Ctrl+F5）。
-- 端口被占用：在 PowerShell 使用 `netstat -ano | findstr :5173` 查找并结束对应进程。
-
-## 许可证
-本项目未声明开源许可证。如需开源，请添加 `LICENSE` 文件并在此处说明。
+## Available Scripts
+- `npm run dev`: Start local development  
+- `npm run build`: Build production files (output to `dist/`)  
+- `npm run preview`: Preview the built production version
